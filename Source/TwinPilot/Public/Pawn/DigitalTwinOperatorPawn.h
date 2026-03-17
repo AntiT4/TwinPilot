@@ -33,6 +33,9 @@ public:
 	void ApplyLookInput(float Yaw, float Pitch);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Input")
+	void AddLookInputDelta(float YawDelta, float PitchDelta);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Input")
 	void SetSprintEnabled(bool bEnabled);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Settings")
@@ -40,6 +43,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Settings")
 	void SetLookSensitivity(float NewLookSensitivity);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void SetLookDistance(float NewLookDistance);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void AddLookDistanceDelta(float LookDistanceDelta);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
 	void FocusAtLocation(FVector TargetWorldLocation, float DesiredDistance = 400.0f);
@@ -86,6 +95,15 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Look", meta = (ClampMin = "0.1"))
 	float LookSensitivity = 1.2f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.0"))
+	float LookDistance = 400.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.0"))
+	float MinLookDistance = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.0"))
+	float MaxLookDistance = 5000.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Look")
 	bool bInvertLookY = false;
 
@@ -103,6 +121,12 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "100.0"))
 	float OrbitMaxDistance = 20000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Orbit")
+	TObjectPtr<AActor> OrbitCenterActor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Orbit")
+	FVector OrbitCenterLocation = FVector::ZeroVector;
 
 private:
 	void UpdateMovementSettings() const;

@@ -18,7 +18,7 @@ ADigitalTwinOperatorPawn::ADigitalTwinOperatorPawn()
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(SceneRoot);
-	CameraBoom->TargetArmLength = 0.0f;
+	CameraBoom->TargetArmLength = LookDistance;
 	CameraBoom->bUsePawnControlRotation = true;
 	CameraBoom->bDoCollisionTest = false;
 
@@ -39,6 +39,7 @@ ADigitalTwinOperatorPawn::ADigitalTwinOperatorPawn()
 void ADigitalTwinOperatorPawn::BeginPlay()
 {
 	Super::BeginPlay();
+	SetLookDistance(LookDistance);
 	UpdateMovementSettings();
 }
 
@@ -90,6 +91,22 @@ void ADigitalTwinOperatorPawn::ApplyLookInput(float Yaw, float Pitch)
 	LookInput.Y = FMath::Clamp(Pitch, -1.0f, 1.0f);
 }
 
+void ADigitalTwinOperatorPawn::AddLookInputDelta(float YawDelta, float PitchDelta)
+{
+	if (Controller == nullptr)
+	{
+		return;
+	}
+
+	const float AppliedPitch = bInvertLookY ? -PitchDelta : PitchDelta;
+	AddControllerYawInput(YawDelta * LookSensitivity);
+	AddControllerPitchInput(AppliedPitch * LookSensitivity);
+
+	FRotator ControlRotation = Controller->GetControlRotation();
+	ControlRotation.Pitch = FMath::ClampAngle(ControlRotation.Pitch, MinPitch, MaxPitch);
+	Controller->SetControlRotation(ControlRotation);
+}
+
 void ADigitalTwinOperatorPawn::SetSprintEnabled(bool bEnabled)
 {
 	bSprintEnabled = bEnabled;
@@ -105,6 +122,23 @@ void ADigitalTwinOperatorPawn::SetMoveSpeed(float NewMoveSpeed)
 void ADigitalTwinOperatorPawn::SetLookSensitivity(float NewLookSensitivity)
 {
 	LookSensitivity = FMath::Max(0.1f, NewLookSensitivity);
+}
+
+void ADigitalTwinOperatorPawn::SetLookDistance(float NewLookDistance)
+{
+	const float SafeMinDistance = FMath::Max(0.0f, MinLookDistance);
+	const float SafeMaxDistance = FMath::Max(SafeMinDistance, MaxLookDistance);
+	LookDistance = FMath::Clamp(NewLookDistance, SafeMinDistance, SafeMaxDistance);
+
+	if (CameraBoom != nullptr)
+	{
+		CameraBoom->TargetArmLength = LookDistance;
+	}
+}
+
+void ADigitalTwinOperatorPawn::AddLookDistanceDelta(float LookDistanceDelta)
+{
+	SetLookDistance(LookDistance + LookDistanceDelta);
 }
 
 void ADigitalTwinOperatorPawn::FocusAtLocation(FVector TargetWorldLocation, float DesiredDistance)
@@ -141,11 +175,16 @@ void ADigitalTwinOperatorPawn::BeginOrbitAroundActor(const AActor* TargetActor)
 	FVector BoundsOrigin = FVector::ZeroVector;
 	FVector BoundsExtent = FVector::ZeroVector;
 	TargetActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
-	BeginOrbitAroundLocation(BoundsOrigin);
+	OrbitCenterActor = const_cast<AActor*>(TargetActor);
+	OrbitCenterLocation = BoundsOrigin;
+	InitializeOrbitFromPivot(OrbitCenterLocation);
+	ApplyOrbitTransform();
 }
 
 void ADigitalTwinOperatorPawn::BeginOrbitAroundLocation(FVector PivotLocation)
 {
+	OrbitCenterActor = nullptr;
+	OrbitCenterLocation = PivotLocation;
 	InitializeOrbitFromPivot(PivotLocation);
 	ApplyOrbitTransform();
 }
@@ -223,6 +262,16 @@ void ADigitalTwinOperatorPawn::InitializeOrbitFromPivot(const FVector& PivotLoca
 
 void ADigitalTwinOperatorPawn::ApplyOrbitTransform()
 {
+	if (OrbitCenterActor != nullptr)
+	{
+		FVector BoundsOrigin = FVector::ZeroVector;
+		FVector BoundsExtent = FVector::ZeroVector;
+		OrbitCenterActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+		OrbitCenterLocation = BoundsOrigin;
+	}
+
+	OrbitPivot = OrbitCenterLocation;
+
 	const FRotator OrbitRotation(OrbitPitch, OrbitYaw, 0.0f);
 	const FVector NewLocation = OrbitPivot + OrbitRotation.Vector() * OrbitDistance;
 	SetActorLocation(NewLocation, false, nullptr, ETeleportType::TeleportPhysics);
