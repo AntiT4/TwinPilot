@@ -9,6 +9,9 @@
 - `ADigitalTwinOperatorPawn`
   - Free-fly operator pawn with move/look/sprint APIs
   - Focus helper for fast camera positioning around a target
+- `ADigitalTwinOperatorController`
+  - Always-on cursor policy for CCTV-style monitoring
+  - Actor click selection and rotate-hold mouse orbit control
 - `UDigitalTwinPawnLibrary`
   - Blueprint callable utility helpers for control and targeting
 

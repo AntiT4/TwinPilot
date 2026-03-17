@@ -5,6 +5,7 @@ Operator-focused player pawn library plugin for Unreal Engine digital twin proje
 ## Features
 
 - `ADigitalTwinOperatorPawn`
+- `ADigitalTwinOperatorController`
 - `UDigitalTwinPawnLibrary` (Blueprint Function Library)
 
 ## Installation
@@ -15,13 +16,18 @@ Operator-focused player pawn library plugin for Unreal Engine digital twin proje
 
 ## Usage
 
-1. Set your default pawn class to `ADigitalTwinOperatorPawn` or a Blueprint child class.
-2. Route input values into these functions:
+1. Set your default pawn class to `ADigitalTwinOperatorPawn` (or a Blueprint child).
+2. Set your player controller class to `ADigitalTwinOperatorController` (or a Blueprint child).
+3. Add input mappings for:
+   - Action `LeftMouseButton` (actor click selection)
+   - Action `RotateView` (hold while rotating)
+   - Axis `Turn` and `LookUp` (mouse delta)
+4. Route movement input values into these functions:
    - `ApplyMoveInput(Right, Forward)`
    - `ApplyVerticalInput(Up)`
    - `ApplyLookInput(Yaw, Pitch)`
    - `SetSprintEnabled(bEnabled)`
-3. Use utility nodes from `UDigitalTwinPawnLibrary`:
+5. Use utility nodes from `UDigitalTwinPawnLibrary`:
    - `SetOperatorPawnMoveSpeed`
    - `FocusOperatorPawnOnActor`
    - `TeleportPawnNearActor`

@@ -9,6 +9,7 @@ class UFloatingPawnMovement;
 class UPawnMovementComponent;
 class USceneComponent;
 class USpringArmComponent;
+class AActor;
 
 UCLASS(Blueprintable)
 class TWINPILOT_API ADigitalTwinOperatorPawn : public APawn
@@ -42,6 +43,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
 	void FocusAtLocation(FVector TargetWorldLocation, float DesiredDistance = 400.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void BeginOrbitAroundActor(const AActor* TargetActor);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void BeginOrbitAroundLocation(FVector PivotLocation);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void EndOrbit();
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void OrbitByMouseDelta(float MouseDeltaX, float MouseDeltaY);
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Camera")
+	bool IsOrbiting() const { return bOrbiting; }
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Input")
 	void ResetInput();
@@ -79,12 +95,28 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Look", meta = (ClampMin = "0.0", ClampMax = "89.0"))
 	float MaxPitch = 80.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "0.01"))
+	float OrbitMouseSensitivity = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "50.0"))
+	float OrbitMinDistance = 150.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "100.0"))
+	float OrbitMaxDistance = 20000.0f;
+
 private:
 	void UpdateMovementSettings() const;
 	void UpdateLook();
+	void InitializeOrbitFromPivot(const FVector& PivotLocation);
+	void ApplyOrbitTransform();
 
 	FVector2D MoveInput = FVector2D::ZeroVector;
 	FVector2D LookInput = FVector2D::ZeroVector;
 	float VerticalInput = 0.0f;
 	bool bSprintEnabled = false;
+	bool bOrbiting = false;
+	FVector OrbitPivot = FVector::ZeroVector;
+	float OrbitDistance = 0.0f;
+	float OrbitYaw = 0.0f;
+	float OrbitPitch = 0.0f;
 };
