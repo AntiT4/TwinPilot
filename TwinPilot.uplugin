@@ -1,0 +1,25 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Twin Pilot",
+	"Description": "Operator-focused pawn and utility library for digital twin projects.",
+	"Category": "DigitalTwin",
+	"CreatedBy": "Codex",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "TwinPilot",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}
