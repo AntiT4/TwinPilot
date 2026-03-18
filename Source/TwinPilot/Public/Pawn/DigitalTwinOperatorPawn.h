@@ -116,12 +116,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "0.01"))
 	float OrbitMouseSensitivity = 0.25f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "50.0"))
-	float OrbitMinDistance = 150.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "100.0"))
-	float OrbitMaxDistance = 20000.0f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Orbit")
 	TObjectPtr<AActor> OrbitCenterActor;
 
@@ -131,16 +125,10 @@ protected:
 private:
 	void UpdateMovementSettings() const;
 	void UpdateLook();
-	void InitializeOrbitFromPivot(const FVector& PivotLocation);
-	void ApplyOrbitTransform();
 
 	FVector2D MoveInput = FVector2D::ZeroVector;
 	FVector2D LookInput = FVector2D::ZeroVector;
 	float VerticalInput = 0.0f;
 	bool bSprintEnabled = false;
 	bool bOrbiting = false;
-	FVector OrbitPivot = FVector::ZeroVector;
-	float OrbitDistance = 0.0f;
-	float OrbitYaw = 0.0f;
-	float OrbitPitch = 0.0f;
 };

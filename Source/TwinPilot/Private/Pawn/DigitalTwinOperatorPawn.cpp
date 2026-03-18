@@ -177,16 +177,28 @@ void ADigitalTwinOperatorPawn::BeginOrbitAroundActor(const AActor* TargetActor)
 	TargetActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
 	OrbitCenterActor = const_cast<AActor*>(TargetActor);
 	OrbitCenterLocation = BoundsOrigin;
-	InitializeOrbitFromPivot(OrbitCenterLocation);
-	ApplyOrbitTransform();
+	bOrbiting = true;
+
+	if (Controller != nullptr)
+	{
+		FRotator DesiredRotation = (OrbitCenterLocation - GetActorLocation()).Rotation();
+		DesiredRotation.Pitch = FMath::ClampAngle(DesiredRotation.Pitch, MinPitch, MaxPitch);
+		Controller->SetControlRotation(DesiredRotation);
+	}
 }
 
 void ADigitalTwinOperatorPawn::BeginOrbitAroundLocation(FVector PivotLocation)
 {
 	OrbitCenterActor = nullptr;
 	OrbitCenterLocation = PivotLocation;
-	InitializeOrbitFromPivot(PivotLocation);
-	ApplyOrbitTransform();
+	bOrbiting = true;
+
+	if (Controller != nullptr)
+	{
+		FRotator DesiredRotation = (OrbitCenterLocation - GetActorLocation()).Rotation();
+		DesiredRotation.Pitch = FMath::ClampAngle(DesiredRotation.Pitch, MinPitch, MaxPitch);
+		Controller->SetControlRotation(DesiredRotation);
+	}
 }
 
 void ADigitalTwinOperatorPawn::EndOrbit()
@@ -201,13 +213,7 @@ void ADigitalTwinOperatorPawn::OrbitByMouseDelta(float MouseDeltaX, float MouseD
 		return;
 	}
 
-	OrbitYaw += MouseDeltaX * OrbitMouseSensitivity;
-
-	const float PitchDirection = bInvertLookY ? 1.0f : -1.0f;
-	OrbitPitch += MouseDeltaY * OrbitMouseSensitivity * PitchDirection;
-	OrbitPitch = FMath::ClampAngle(OrbitPitch, MinPitch, MaxPitch);
-
-	ApplyOrbitTransform();
+	AddLookInputDelta(MouseDeltaX * OrbitMouseSensitivity, MouseDeltaY * OrbitMouseSensitivity);
 }
 
 void ADigitalTwinOperatorPawn::ResetInput()
@@ -244,42 +250,4 @@ void ADigitalTwinOperatorPawn::UpdateLook()
 	FRotator ControlRotation = Controller->GetControlRotation();
 	ControlRotation.Pitch = FMath::ClampAngle(ControlRotation.Pitch, MinPitch, MaxPitch);
 	Controller->SetControlRotation(ControlRotation);
-}
-
-void ADigitalTwinOperatorPawn::InitializeOrbitFromPivot(const FVector& PivotLocation)
-{
-	OrbitPivot = PivotLocation;
-
-	const FVector ToPawn = GetActorLocation() - OrbitPivot;
-	const float RawDistance = ToPawn.IsNearlyZero() ? 1000.0f : ToPawn.Size();
-	OrbitDistance = FMath::Clamp(RawDistance, OrbitMinDistance, OrbitMaxDistance);
-
-	const FRotator DirectionRotation = ToPawn.IsNearlyZero() ? GetActorRotation() : ToPawn.Rotation();
-	OrbitYaw = DirectionRotation.Yaw;
-	OrbitPitch = FMath::ClampAngle(DirectionRotation.Pitch, MinPitch, MaxPitch);
-	bOrbiting = true;
-}
-
-void ADigitalTwinOperatorPawn::ApplyOrbitTransform()
-{
-	if (OrbitCenterActor != nullptr)
-	{
-		FVector BoundsOrigin = FVector::ZeroVector;
-		FVector BoundsExtent = FVector::ZeroVector;
-		OrbitCenterActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
-		OrbitCenterLocation = BoundsOrigin;
-	}
-
-	OrbitPivot = OrbitCenterLocation;
-
-	const FRotator OrbitRotation(OrbitPitch, OrbitYaw, 0.0f);
-	const FVector NewLocation = OrbitPivot + OrbitRotation.Vector() * OrbitDistance;
-	SetActorLocation(NewLocation, false, nullptr, ETeleportType::TeleportPhysics);
-
-	if (Controller != nullptr)
-	{
-		FRotator LookAtRotation = (OrbitPivot - NewLocation).Rotation();
-		LookAtRotation.Pitch = FMath::ClampAngle(LookAtRotation.Pitch, MinPitch, MaxPitch);
-		Controller->SetControlRotation(LookAtRotation);
-	}
 }

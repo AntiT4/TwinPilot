@@ -39,16 +39,16 @@ public:
 	bool bUseCursorHitAsOrbitPivotWhenNoSelection = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Input")
-	FName SelectActionName = TEXT("LeftMouseButton");
+	FName SelectActionName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Input")
-	FName RotateActionName = TEXT("RotateView");
+	FName RotateActionName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Input")
-	FName MouseXAxisName = TEXT("Turn");
+	FName MouseXAxisName = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Input")
-	FName MouseYAxisName = TEXT("LookUp");
+	FName MouseYAxisName = NAME_None;
 
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
