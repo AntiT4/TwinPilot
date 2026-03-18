@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/EngineTypes.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "DigitalTwinPawnLibrary.generated.h"
 
@@ -26,6 +27,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Control")
 	static void SetPlayerLookInputEnabled(APlayerController* PlayerController, bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Interaction", meta = (DefaultToSelf = "PlayerController"))
+	static bool GetActorUnderCursor(
+		APlayerController* PlayerController,
+		AActor*& OutActor,
+		ECollisionChannel TraceChannel = ECC_Visibility,
+		bool bTraceComplex = true);
 
 	UFUNCTION(BlueprintPure, Category = "TwinPilot|Math")
 	static FVector GetActorBoundsCenter(const AActor* TargetActor, float& OutSphereRadius);

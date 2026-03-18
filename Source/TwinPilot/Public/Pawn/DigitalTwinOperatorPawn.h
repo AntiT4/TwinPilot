@@ -5,6 +5,7 @@
 #include "DigitalTwinOperatorPawn.generated.h"
 
 class UCameraComponent;
+class UArrowComponent;
 class UFloatingPawnMovement;
 class UPawnMovementComponent;
 class USceneComponent;
@@ -30,7 +31,7 @@ public:
 	void ApplyVerticalInput(float Up);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Input")
-	void ApplyLookInput(float Yaw, float Pitch);
+	void SetLookInput(float Yaw, float Pitch);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Input")
 	void AddLookInputDelta(float YawDelta, float PitchDelta);
@@ -48,22 +49,22 @@ public:
 	void SetLookDistance(float NewLookDistance);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
-	void AddLookDistanceDelta(float LookDistanceDelta);
+	void AddLookDistanceDelta(float LookDistanceDelta, bool bInvertDelta = false);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
 	void FocusAtLocation(FVector TargetWorldLocation, float DesiredDistance = 400.0f);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
-	void BeginOrbitAroundActor(const AActor* TargetActor);
+	void SetCenterActor(const AActor* TargetActor);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
-	void BeginOrbitAroundLocation(FVector PivotLocation);
+	void SetCenterLocation(FVector PivotLocation);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void BeginOrbit();
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
 	void EndOrbit();
-
-	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
-	void OrbitByMouseDelta(float MouseDeltaX, float MouseDeltaY);
 
 	UFUNCTION(BlueprintPure, Category = "TwinPilot|Camera")
 	bool IsOrbiting() const { return bOrbiting; }
@@ -82,6 +83,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "TwinPilot|Components")
 	TObjectPtr<UCameraComponent> Camera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "TwinPilot|Components")
+	TObjectPtr<UArrowComponent> OrbitCenterArrow;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "TwinPilot|Components")
 	TObjectPtr<UFloatingPawnMovement> MovementComponent;
@@ -104,8 +108,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.0"))
 	float MaxLookDistance = 5000.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.01"))
+	float LookDistanceSensitivity = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Look")
-	bool bInvertLookY = false;
+	bool bInvertLookYaw = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Look")
+	bool bInvertLookPitch = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Look", meta = (ClampMin = "-89.0", ClampMax = "0.0"))
 	float MinPitch = -80.0f;

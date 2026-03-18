@@ -2,6 +2,7 @@
 
 #include "Pawn/DigitalTwinOperatorPawn.h"
 
+#include "Engine/EngineTypes.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
@@ -51,6 +52,26 @@ void UDigitalTwinPawnLibrary::SetPlayerLookInputEnabled(APlayerController* Playe
 	}
 
 	PlayerController->SetIgnoreLookInput(!bEnabled);
+}
+
+bool UDigitalTwinPawnLibrary::GetActorUnderCursor(
+	APlayerController* PlayerController,
+	AActor*& OutActor,
+	ECollisionChannel TraceChannel,
+	bool bTraceComplex)
+{
+	OutActor = nullptr;
+
+	if (PlayerController == nullptr)
+	{
+		return false;
+	}
+
+	FHitResult Hit;
+	const ETraceTypeQuery TraceType = UEngineTypes::ConvertToTraceType(TraceChannel);
+	const bool bHit = PlayerController->GetHitResultUnderCursorByChannel(TraceType, bTraceComplex, Hit);
+	OutActor = bHit ? Hit.GetActor() : nullptr;
+	return OutActor != nullptr;
 }
 
 FVector UDigitalTwinPawnLibrary::GetActorBoundsCenter(const AActor* TargetActor, float& OutSphereRadius)

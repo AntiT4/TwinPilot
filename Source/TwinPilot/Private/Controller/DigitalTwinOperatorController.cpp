@@ -1,11 +1,64 @@
 #include "Controller/DigitalTwinOperatorController.h"
 
+#include "Libraries/DigitalTwinPawnLibrary.h"
 #include "Pawn/DigitalTwinOperatorPawn.h"
 
-#include "Engine/EngineTypes.h"
+#include "Components/PrimitiveComponent.h"
+#include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTwinPilotOperatorController, Log, All);
+
+namespace
+{
+	constexpr int32 SelectedActorStencilValue = 5;
+	constexpr int32 HoveredActorStencilValue = 1;
+
+	void SetActorStencilState(AActor* TargetActor, bool bEnabled, int32 StencilValue)
+	{
+		if (TargetActor == nullptr)
+		{
+			return;
+		}
+
+		TArray<UPrimitiveComponent*> PrimitiveComponents;
+		TargetActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents, true);
+
+		for (UPrimitiveComponent* PrimitiveComponent : PrimitiveComponents)
+		{
+			if (PrimitiveComponent == nullptr)
+			{
+				continue;
+			}
+
+			PrimitiveComponent->SetRenderCustomDepth(bEnabled);
+			PrimitiveComponent->SetCustomDepthStencilValue(bEnabled ? StencilValue : 0);
+		}
+	}
+
+	void RefreshActorStencilByInteractionState(
+		AActor* TargetActor,
+		AActor* CurrentSelectedActor,
+		AActor* CurrentHoveredActor)
+	{
+		if (TargetActor == nullptr)
+		{
+			return;
+		}
+
+		const bool bIsSelected = TargetActor == CurrentSelectedActor;
+		const bool bIsHovered = TargetActor == CurrentHoveredActor;
+
+		if (!bIsSelected && !bIsHovered)
+		{
+			SetActorStencilState(TargetActor, false, 0);
+			return;
+		}
+
+		const int32 StencilValue = bIsSelected ? SelectedActorStencilValue : HoveredActorStencilValue;
+		SetActorStencilState(TargetActor, true, StencilValue);
+	}
+}
 
 void ADigitalTwinOperatorController::BeginPlay()
 {
@@ -13,45 +66,14 @@ void ADigitalTwinOperatorController::BeginPlay()
 	ApplyMouseCursorPolicy();
 }
 
-void ADigitalTwinOperatorController::SetupInputComponent()
-{
-	Super::SetupInputComponent();
-
-	if (InputComponent == nullptr)
-	{
-		return;
-	}
-
-	if (bEnableMouseClickSelection && SelectActionName != NAME_None)
-	{
-		InputComponent->BindAction(SelectActionName, IE_Pressed, this, &ADigitalTwinOperatorController::OnSelectPressed);
-	}
-
-	if (RotateActionName != NAME_None)
-	{
-		InputComponent->BindAction(RotateActionName, IE_Pressed, this, &ADigitalTwinOperatorController::OnRotatePressed);
-		InputComponent->BindAction(RotateActionName, IE_Released, this, &ADigitalTwinOperatorController::OnRotateReleased);
-	}
-
-	if (MouseXAxisName != NAME_None)
-	{
-		InputComponent->BindAxis(MouseXAxisName, this, &ADigitalTwinOperatorController::OnMouseX);
-	}
-
-	if (MouseYAxisName != NAME_None)
-	{
-		InputComponent->BindAxis(MouseYAxisName, this, &ADigitalTwinOperatorController::OnMouseY);
-	}
-}
-
 bool ADigitalTwinOperatorController::SelectActorUnderCursor()
 {
-	FHitResult Hit;
-	const ETraceTypeQuery TraceChannel = UEngineTypes::ConvertToTraceType(ECC_Visibility);
-	const bool bHit = GetHitResultUnderCursorByChannel(TraceChannel, true, Hit);
-	AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
-
+	AActor* HitActor = nullptr;
+	UDigitalTwinPawnLibrary::GetActorUnderCursor(this, HitActor);
+	AActor* PreviousSelectedActor = SelectedActor.Get();
 	SelectedActor = HitActor;
+	RefreshActorStencilByInteractionState(PreviousSelectedActor, SelectedActor.Get(), HoveredActor.Get());
+	RefreshActorStencilByInteractionState(SelectedActor.Get(), SelectedActor.Get(), HoveredActor.Get());
 
 	if (SelectedActor != nullptr)
 	{
@@ -71,6 +93,24 @@ bool ADigitalTwinOperatorController::SelectActorUnderCursor()
 	return SelectedActor != nullptr;
 }
 
+bool ADigitalTwinOperatorController::HoverActorUnderCursor()
+{
+	AActor* HitActor = nullptr;
+	UDigitalTwinPawnLibrary::GetActorUnderCursor(this, HitActor);
+	AActor* PreviousHoveredActor = HoveredActor.Get();
+
+	if (PreviousHoveredActor == HitActor)
+	{
+		return HoveredActor != nullptr;
+	}
+
+	HoveredActor = HitActor;
+	RefreshActorStencilByInteractionState(PreviousHoveredActor, SelectedActor.Get(), HoveredActor.Get());
+	RefreshActorStencilByInteractionState(HoveredActor.Get(), SelectedActor.Get(), HoveredActor.Get());
+	OnActorHovered.Broadcast(HoveredActor);
+	return HoveredActor != nullptr;
+}
+
 void ADigitalTwinOperatorController::SetRotateHeld(bool bHeld)
 {
 	if (bRotateHeld == bHeld)
@@ -88,7 +128,7 @@ void ADigitalTwinOperatorController::SetRotateHeld(bool bHeld)
 
 	if (bRotateHeld)
 	{
-		BeginOrbitWithBestPivot();
+		OperatorPawn->BeginOrbit();
 	}
 	else
 	{
@@ -106,76 +146,4 @@ void ADigitalTwinOperatorController::ApplyMouseCursorPolicy()
 	InputMode.SetHideCursorDuringCapture(false);
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
-}
-
-void ADigitalTwinOperatorController::OnSelectPressed()
-{
-	SelectActorUnderCursor();
-}
-
-void ADigitalTwinOperatorController::OnRotatePressed()
-{
-	SetRotateHeld(true);
-}
-
-void ADigitalTwinOperatorController::OnRotateReleased()
-{
-	SetRotateHeld(false);
-}
-
-void ADigitalTwinOperatorController::OnMouseX(float AxisValue)
-{
-	if (!bRotateHeld || FMath::IsNearlyZero(AxisValue))
-	{
-		return;
-	}
-
-	ADigitalTwinOperatorPawn* OperatorPawn = Cast<ADigitalTwinOperatorPawn>(GetPawn());
-	if (OperatorPawn != nullptr)
-	{
-		OperatorPawn->OrbitByMouseDelta(AxisValue, 0.0f);
-	}
-}
-
-void ADigitalTwinOperatorController::OnMouseY(float AxisValue)
-{
-	if (!bRotateHeld || FMath::IsNearlyZero(AxisValue))
-	{
-		return;
-	}
-
-	ADigitalTwinOperatorPawn* OperatorPawn = Cast<ADigitalTwinOperatorPawn>(GetPawn());
-	if (OperatorPawn != nullptr)
-	{
-		OperatorPawn->OrbitByMouseDelta(0.0f, AxisValue);
-	}
-}
-
-void ADigitalTwinOperatorController::BeginOrbitWithBestPivot()
-{
-	ADigitalTwinOperatorPawn* OperatorPawn = Cast<ADigitalTwinOperatorPawn>(GetPawn());
-	if (OperatorPawn == nullptr)
-	{
-		return;
-	}
-
-	if (SelectedActor != nullptr)
-	{
-		OperatorPawn->BeginOrbitAroundActor(SelectedActor);
-		return;
-	}
-
-	if (bUseCursorHitAsOrbitPivotWhenNoSelection)
-	{
-		FHitResult Hit;
-		const ETraceTypeQuery TraceChannel = UEngineTypes::ConvertToTraceType(ECC_Visibility);
-		if (GetHitResultUnderCursorByChannel(TraceChannel, true, Hit))
-		{
-			OperatorPawn->BeginOrbitAroundLocation(Hit.ImpactPoint);
-			return;
-		}
-	}
-
-	const FVector FallbackPivot = OperatorPawn->GetActorLocation() + OperatorPawn->GetActorForwardVector() * 1000.0f;
-	OperatorPawn->BeginOrbitAroundLocation(FallbackPivot);
 }
