@@ -40,5 +40,11 @@ TwinPilot is an Unreal Engine plugin for operator-style camera and interaction c
 
 ## License
 
-This project is licensed under the Apache License 2.0.
-See `LICENSE` for full text.
+Unless otherwise noted, the original source code and original repository-authored non-code files in this repository are licensed under the Apache License 2.0.
+See `LICENSE` for the full text.
+
+### Licensing Scope and Exceptions
+
+- This repository does not relicense Unreal Engine code, headers, or content.
+- Use with Unreal Engine is subject to Epic's Unreal Engine EULA.
+- Third-party dependency/license metadata is tracked in `ThirdParty.json`.
