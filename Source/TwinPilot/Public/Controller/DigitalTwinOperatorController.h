@@ -18,7 +18,7 @@ public:
 	virtual void BeginPlay() override;
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Interaction")
-	bool SelectActorUnderCursor();
+	bool SelectActorUnderCursor(AActor*& HitActor);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Interaction")
 	bool HoverActorUnderCursor();

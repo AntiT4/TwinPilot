@@ -66,9 +66,9 @@ void ADigitalTwinOperatorController::BeginPlay()
 	ApplyMouseCursorPolicy();
 }
 
-bool ADigitalTwinOperatorController::SelectActorUnderCursor()
+bool ADigitalTwinOperatorController::SelectActorUnderCursor(AActor*& HitActor)
 {
-	AActor* HitActor = nullptr;
+	HitActor = nullptr;
 	UDigitalTwinPawnLibrary::GetActorUnderCursor(this, HitActor);
 	AActor* PreviousSelectedActor = SelectedActor.Get();
 	SelectedActor = HitActor;
