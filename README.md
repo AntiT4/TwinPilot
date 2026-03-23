@@ -1,46 +1,44 @@
 # TwinPilot
 
-Operator-focused player pawn library plugin for Unreal Engine digital twin projects.
+TwinPilot is an Unreal Engine plugin for operator-style camera and interaction control in digital twin scenes.
 
-## Features
+## Scope
 
-- `ADigitalTwinOperatorPawn`
-- `ADigitalTwinOperatorController`
-- `UDigitalTwinPawnLibrary` (Blueprint Function Library)
+- Runtime module: `TwinPilot`
+- Primary types:
+  - `ADigitalTwinOperatorPawn`
+  - `ADigitalTwinOperatorController`
+  - `UDigitalTwinPawnLibrary` (Blueprint Function Library)
 
-## Installation
+## Key Capabilities
 
-1. Place this repository under your project `Plugins` directory as `Plugins/TwinPilot`.
-2. Generate project files and build the project.
-3. Enable the plugin from `Edit > Plugins` if needed.
+- Orbit/pan/zoom operator camera controls.
+- Cursor-based actor hover and selection.
+- Custom depth/stencil tagging for interaction highlight workflows.
+- Blueprint-friendly utility functions for movement, focus, and look-control toggles.
 
-## Usage
+## Quick Start
 
-1. Set your default pawn class to `ADigitalTwinOperatorPawn` (or a Blueprint child).
-2. Set your player controller class to `ADigitalTwinOperatorController` (or a Blueprint child).
-3. Add input mappings for:
-   - Action `LeftMouseButton` (actor click selection)
-   - Action `RotateView` (hold while rotating)
-   - Axis `Turn` and `LookUp` (mouse delta)
-4. Route movement input values into these functions:
-   - `ApplyMoveInput(Right, Forward)`
-   - `ApplyVerticalInput(Up)`
-   - `ApplyLookInput(Yaw, Pitch)`
-   - `SetSprintEnabled(bEnabled)`
-5. Use utility nodes from `UDigitalTwinPawnLibrary`:
-   - `SetOperatorPawnMoveSpeed`
-   - `FocusOperatorPawnOnActor`
-   - `TeleportPawnNearActor`
-   - `SetPlayerLookInputEnabled`
+1. Place plugin in `Plugins/TwinPilot`.
+2. Regenerate project files and build.
+3. Set:
+   - Player Pawn: `ADigitalTwinOperatorPawn` (or child BP)
+   - Player Controller: `ADigitalTwinOperatorController` (or child BP)
+4. Bind input actions/axes to your project mappings.
+
+## Interaction Notes
+
+- `SelectActorUnderCursor(AActor*& HitActor)` returns selection success and exposes the hit actor.
+- `OnActorSelected` and `OnActorHovered` delegates are provided for Blueprint event wiring.
 
 ## Repository Layout
 
-- `Source/` plugin runtime module source
-- `Content/` optional plugin content assets
-- `Documentation/` notes and technical docs
-- `TwinPilot.uplugin` plugin descriptor
+- `Source/`: runtime source
+- `Content/`: plugin assets
+- `Documentation/`: design/architecture notes
+- `TwinPilot.uplugin`: plugin descriptor
 
-## Notes
+## License
 
-- This plugin is intended to be maintained as an independent Git repository.
-- Add `Plugins/TwinPilot/` to the parent project's `.gitignore` to isolate plugin changes from the parent repo.
+This project is licensed under the Apache License 2.0.
+See `LICENSE` for full text.
