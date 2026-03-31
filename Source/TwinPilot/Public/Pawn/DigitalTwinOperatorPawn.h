@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+#include "Interfaces/TwinPilotPawnControl.h"
 #include "DigitalTwinOperatorPawn.generated.h"
 
 class UCameraComponent;
@@ -13,7 +14,7 @@ class USpringArmComponent;
 class AActor;
 
 UCLASS(Blueprintable)
-class TWINPILOT_API ADigitalTwinOperatorPawn : public APawn
+class TWINPILOT_API ADigitalTwinOperatorPawn : public APawn, public ITwinPilotPawnControl
 {
 	GENERATED_BODY()
 
@@ -55,6 +56,9 @@ public:
 	void FocusAtLocation(FVector TargetWorldLocation, float DesiredDistance = 400.0f);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
+	void GoTowardActor(const AActor* TargetActor);
+
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
 	void SetCenterActor(const AActor* TargetActor);
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Camera")
@@ -69,8 +73,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "TwinPilot|Camera")
 	bool IsOrbiting() const { return bOrbiting; }
 
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Camera")
+	bool IsPanning() const { return bPanning; }
+
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Input")
 	void ResetInput();
+
+	virtual void HandleConfirmedActor_Implementation(const AActor* TargetActor) override;
+	virtual void SetOrbitHeld_Implementation(bool bHeld) override;
+	virtual void SetPanHeld_Implementation(bool bHeld) override;
+	virtual void AddPanInputDelta_Implementation(float ScreenXDelta, float ScreenYDelta) override;
 
 protected:
 	virtual void BeginPlay() override;
@@ -126,6 +138,18 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Orbit", meta = (ClampMin = "0.01"))
 	float OrbitMouseSensitivity = 0.25f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.01"))
+	float GoTowardInterpSpeed = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.0"))
+	float GoTowardArrivalTolerance = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Camera", meta = (ClampMin = "0.01"))
+	float CameraBoomProbeSize = 6.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "TwinPilot|Pan", meta = (ClampMin = "0.01"))
+	float PanSensitivity = 1.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Orbit")
 	TObjectPtr<AActor> OrbitCenterActor;
 
@@ -135,10 +159,21 @@ protected:
 private:
 	void UpdateMovementSettings() const;
 	void UpdateLook();
+	void UpdateGoTowardActor(float DeltaSeconds);
+	void UpdatePan();
+	void UpdateOrbitCenterFromTrackedActor();
 
 	FVector2D MoveInput = FVector2D::ZeroVector;
 	FVector2D LookInput = FVector2D::ZeroVector;
+	FVector2D PendingPanInput = FVector2D::ZeroVector;
 	float VerticalInput = 0.0f;
+	FVector GoTowardTargetLocation = FVector::ZeroVector;
+	FVector OrbitCenterBaseLocation = FVector::ZeroVector;
+	FVector OrbitCenterBoundsExtent = FVector::ZeroVector;
+	FVector OrbitCenterOffset = FVector::ZeroVector;
+	TObjectPtr<AActor> GoTowardTargetActor;
+	bool bIsArrived = true;
 	bool bSprintEnabled = false;
 	bool bOrbiting = false;
+	bool bPanning = false;
 };
