@@ -160,8 +160,28 @@ void ADigitalTwinOperatorPawn::SetLookDistance(float NewLookDistance)
 
 void ADigitalTwinOperatorPawn::AddLookDistanceDelta(float LookDistanceDelta, bool bInvertDelta)
 {
-	const float EffectiveDelta = bInvertDelta ? -LookDistanceDelta : LookDistanceDelta;
-	SetLookDistance(LookDistance + EffectiveDelta * LookDistanceSensitivity);
+	const float EffectiveDelta = (bInvertDelta ? -LookDistanceDelta : LookDistanceDelta) * LookDistanceSensitivity;
+	if (FMath::IsNearlyZero(EffectiveDelta))
+	{
+		return;
+	}
+
+	const bool bCollisionConstrained = IsCameraBoomCollisionConstrained();
+	if (bCollisionConstrained)
+	{
+		const float CurrentArmLength = GetCurrentCameraBoomLength();
+
+		if (EffectiveDelta < 0.0f)
+		{
+			SetLookDistance(CurrentArmLength + EffectiveDelta);
+			return;
+		}
+
+		SetLookDistance(CurrentArmLength);
+		return;
+	}
+
+	SetLookDistance(LookDistance + EffectiveDelta);
 }
 
 void ADigitalTwinOperatorPawn::FocusAtLocation(FVector TargetWorldLocation, float DesiredDistance)
@@ -375,6 +395,23 @@ void ADigitalTwinOperatorPawn::UpdateOrbitCenterFromTrackedActor()
 	OrbitCenterOffset.Y = FMath::Clamp(OrbitCenterOffset.Y, -OrbitCenterBoundsExtent.Y, OrbitCenterBoundsExtent.Y);
 	OrbitCenterOffset.Z = FMath::Clamp(OrbitCenterOffset.Z, -OrbitCenterBoundsExtent.Z, OrbitCenterBoundsExtent.Z);
 	OrbitCenterLocation = OrbitCenterBaseLocation + OrbitCenterOffset;
+}
+
+float ADigitalTwinOperatorPawn::GetCurrentCameraBoomLength() const
+{
+	if (CameraBoom == nullptr)
+	{
+		return LookDistance;
+	}
+
+	const FVector BoomOrigin = CameraBoom->GetComponentLocation();
+	const FVector BoomSocketLocation = CameraBoom->GetSocketLocation(USpringArmComponent::SocketName);
+	return FVector::Dist(BoomOrigin, BoomSocketLocation);
+}
+
+bool ADigitalTwinOperatorPawn::IsCameraBoomCollisionConstrained() const
+{
+	return CameraBoom != nullptr && CameraBoom->bDoCollisionTest && CameraBoom->IsCollisionFixApplied();
 }
 
 void ADigitalTwinOperatorPawn::UpdateLook()

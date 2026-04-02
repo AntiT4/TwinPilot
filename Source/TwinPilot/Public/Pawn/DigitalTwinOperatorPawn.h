@@ -157,6 +157,9 @@ protected:
 	FVector OrbitCenterLocation = FVector::ZeroVector;
 
 private:
+	float GetCurrentCameraBoomLength() const;
+	bool IsCameraBoomCollisionConstrained() const;
+
 	void UpdateMovementSettings() const;
 	void UpdateLook();
 	void UpdateGoTowardActor(float DeltaSeconds);
