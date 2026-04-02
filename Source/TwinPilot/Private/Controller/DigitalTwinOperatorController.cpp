@@ -1,7 +1,7 @@
 #include "Controller/DigitalTwinOperatorController.h"
 
+#include "Interfaces/TwinPilotPawnControl.h"
 #include "Libraries/DigitalTwinPawnLibrary.h"
-#include "Pawn/DigitalTwinOperatorPawn.h"
 
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
@@ -11,8 +11,29 @@ DEFINE_LOG_CATEGORY_STATIC(LogTwinPilotOperatorController, Log, All);
 
 namespace
 {
-	constexpr int32 SelectedActorStencilValue = 5;
-	constexpr int32 HoveredActorStencilValue = 1;
+	constexpr int32 ConfirmedActorStencilValue = 5;
+	constexpr int32 SelectedActorStencilValue = 1;
+
+	void ExecuteOnControlledPawn(APlayerController* PlayerController, TFunctionRef<void(APawn*)> Callback)
+	{
+		if (PlayerController == nullptr)
+		{
+			return;
+		}
+
+		APawn* ControlledPawn = PlayerController->GetPawn();
+		if (ControlledPawn == nullptr)
+		{
+			return;
+		}
+
+		if (!ControlledPawn->GetClass()->ImplementsInterface(UTwinPilotPawnControl::StaticClass()))
+		{
+			return;
+		}
+
+		Callback(ControlledPawn);
+	}
 
 	void SetActorStencilState(AActor* TargetActor, bool bEnabled, int32 StencilValue)
 	{
@@ -38,24 +59,24 @@ namespace
 
 	void RefreshActorStencilByInteractionState(
 		AActor* TargetActor,
-		AActor* CurrentSelectedActor,
-		AActor* CurrentHoveredActor)
+		AActor* CurrentConfirmedActor,
+		AActor* CurrentSelectedActor)
 	{
 		if (TargetActor == nullptr)
 		{
 			return;
 		}
 
+		const bool bIsConfirmed = TargetActor == CurrentConfirmedActor;
 		const bool bIsSelected = TargetActor == CurrentSelectedActor;
-		const bool bIsHovered = TargetActor == CurrentHoveredActor;
 
-		if (!bIsSelected && !bIsHovered)
+		if (!bIsConfirmed && !bIsSelected)
 		{
 			SetActorStencilState(TargetActor, false, 0);
 			return;
 		}
 
-		const int32 StencilValue = bIsSelected ? SelectedActorStencilValue : HoveredActorStencilValue;
+		const int32 StencilValue = bIsConfirmed ? ConfirmedActorStencilValue : SelectedActorStencilValue;
 		SetActorStencilState(TargetActor, true, StencilValue);
 	}
 }
@@ -66,49 +87,121 @@ void ADigitalTwinOperatorController::BeginPlay()
 	ApplyMouseCursorPolicy();
 }
 
-bool ADigitalTwinOperatorController::SelectActorUnderCursor(AActor*& HitActor)
+bool ADigitalTwinOperatorController::ConfirmActorUnderCursor(AActor*& HitActor)
 {
-	HitActor = nullptr;
-	UDigitalTwinPawnLibrary::GetActorUnderCursor(this, HitActor);
-	AActor* PreviousSelectedActor = SelectedActor.Get();
-	SelectedActor = HitActor;
-	RefreshActorStencilByInteractionState(PreviousSelectedActor, SelectedActor.Get(), HoveredActor.Get());
-	RefreshActorStencilByInteractionState(SelectedActor.Get(), SelectedActor.Get(), HoveredActor.Get());
+	GetSelectableActorUnderCursor(HitActor);
 
-	if (SelectedActor != nullptr)
+	if (HitActor == nullptr || HitActor != SelectedActor.Get())
+	{
+		return false;
+	}
+
+	AActor* PreviousConfirmedActor = ConfirmedActor.Get();
+	ConfirmedActor = HitActor;
+	RefreshActorStencilByInteractionState(PreviousConfirmedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	RefreshActorStencilByInteractionState(ConfirmedActor.Get(), ConfirmedActor.Get(), SelectedActor.Get());
+
+	if (ConfirmedActor != nullptr)
 	{
 		UE_LOG(
 			LogTwinPilotOperatorController,
 			Log,
-			TEXT("Clicked actor: %s | Class: %s"),
-			*GetNameSafe(SelectedActor),
-			*GetNameSafe(SelectedActor->GetClass()));
+			TEXT("Confirmed actor: %s | Class: %s"),
+			*GetNameSafe(ConfirmedActor),
+			*GetNameSafe(ConfirmedActor->GetClass()));
 	}
 	else
 	{
-		UE_LOG(LogTwinPilotOperatorController, Log, TEXT("Clicked actor: None"));
+		UE_LOG(LogTwinPilotOperatorController, Log, TEXT("Confirmed actor: None"));
 	}
 
-	OnActorSelected.Broadcast(SelectedActor);
+	OnActorSelected.Broadcast(ConfirmedActor);
+	ExecuteOnControlledPawn(this, [this](APawn* ControlledPawn)
+	{
+		ITwinPilotPawnControl::Execute_HandleConfirmedActor(ControlledPawn, ConfirmedActor.Get());
+	});
+
+	return ConfirmedActor != nullptr;
+}
+
+bool ADigitalTwinOperatorController::SelectActorUnderCursor(AActor*& HitActor)
+{
+	return ConfirmActorUnderCursor(HitActor);
+}
+
+bool ADigitalTwinOperatorController::SelectUnderCursor()
+{
+	AActor* HitActor = nullptr;
+	GetSelectableActorUnderCursor(HitActor);
+	AActor* PreviousSelectedActor = SelectedActor.Get();
+
+	if (HitActor == nullptr)
+	{
+		return ClearConfirmedActor();
+	}
+
+	if (PreviousSelectedActor == HitActor)
+	{
+		return true;
+	}
+
+	SelectedActor = HitActor;
+	RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	RefreshActorStencilByInteractionState(SelectedActor.Get(), ConfirmedActor.Get(), SelectedActor.Get());
+	OnActorHovered.Broadcast(SelectedActor);
 	return SelectedActor != nullptr;
+}
+
+bool ADigitalTwinOperatorController::ClearSelectedActor()
+{
+	AActor* PreviousSelectedActor = SelectedActor.Get();
+	if (PreviousSelectedActor == nullptr)
+	{
+		return false;
+	}
+
+	SelectedActor = nullptr;
+	RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	OnActorHovered.Broadcast(SelectedActor);
+	return true;
+}
+
+bool ADigitalTwinOperatorController::ClearConfirmedActor()
+{
+	AActor* PreviousConfirmedActor = ConfirmedActor.Get();
+	AActor* PreviousSelectedActor = SelectedActor.Get();
+	if (PreviousConfirmedActor == nullptr && PreviousSelectedActor == nullptr)
+	{
+		return false;
+	}
+
+	ConfirmedActor = nullptr;
+	SelectedActor = nullptr;
+
+	RefreshActorStencilByInteractionState(PreviousConfirmedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	if (PreviousSelectedActor != PreviousConfirmedActor)
+	{
+		RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	}
+
+	OnActorHovered.Broadcast(SelectedActor);
+	OnActorSelected.Broadcast(ConfirmedActor);
+	ExecuteOnControlledPawn(this, [](APawn* ControlledPawn)
+	{
+		ITwinPilotPawnControl::Execute_HandleConfirmedActor(ControlledPawn, nullptr);
+	});
+
+	return true;
+}
+
+bool ADigitalTwinOperatorController::PreselectActorUnderCursor()
+{
+	return SelectUnderCursor();
 }
 
 bool ADigitalTwinOperatorController::HoverActorUnderCursor()
 {
-	AActor* HitActor = nullptr;
-	UDigitalTwinPawnLibrary::GetActorUnderCursor(this, HitActor);
-	AActor* PreviousHoveredActor = HoveredActor.Get();
-
-	if (PreviousHoveredActor == HitActor)
-	{
-		return HoveredActor != nullptr;
-	}
-
-	HoveredActor = HitActor;
-	RefreshActorStencilByInteractionState(PreviousHoveredActor, SelectedActor.Get(), HoveredActor.Get());
-	RefreshActorStencilByInteractionState(HoveredActor.Get(), SelectedActor.Get(), HoveredActor.Get());
-	OnActorHovered.Broadcast(HoveredActor);
-	return HoveredActor != nullptr;
+	return SelectUnderCursor();
 }
 
 void ADigitalTwinOperatorController::SetRotateHeld(bool bHeld)
@@ -119,21 +212,29 @@ void ADigitalTwinOperatorController::SetRotateHeld(bool bHeld)
 	}
 
 	bRotateHeld = bHeld;
+	ExecuteOnControlledPawn(this, [bHeld](APawn* ControlledPawn)
+	{
+		ITwinPilotPawnControl::Execute_SetOrbitHeld(ControlledPawn, bHeld);
+	});
+}
 
-	ADigitalTwinOperatorPawn* OperatorPawn = Cast<ADigitalTwinOperatorPawn>(GetPawn());
-	if (OperatorPawn == nullptr)
+void ADigitalTwinOperatorController::SetPanHeld(bool bHeld)
+{
+	ExecuteOnControlledPawn(this, [bHeld](APawn* ControlledPawn)
 	{
-		return;
-	}
+		ITwinPilotPawnControl::Execute_SetPanHeld(ControlledPawn, bHeld);
+	});
+}
 
-	if (bRotateHeld)
+void ADigitalTwinOperatorController::AddPanInputDelta(float ScreenXDelta, float ScreenYDelta)
+{
+	ExecuteOnControlledPawn(this, [ScreenXDelta, ScreenYDelta](APawn* ControlledPawn)
 	{
-		OperatorPawn->BeginOrbit();
-	}
-	else
-	{
-		OperatorPawn->EndOrbit();
-	}
+		ITwinPilotPawnControl::Execute_AddPanInputDelta(
+			ControlledPawn,
+			ScreenXDelta,
+			ScreenYDelta);
+	});
 }
 
 void ADigitalTwinOperatorController::ApplyMouseCursorPolicy()
@@ -146,4 +247,31 @@ void ADigitalTwinOperatorController::ApplyMouseCursorPolicy()
 	InputMode.SetHideCursorDuringCapture(false);
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
+}
+
+bool ADigitalTwinOperatorController::GetSelectableActorUnderCursor(AActor*& HitActor) const
+{
+	HitActor = nullptr;
+	UDigitalTwinPawnLibrary::GetActorUnderCursor(const_cast<ADigitalTwinOperatorController*>(this), HitActor);
+
+	if (ShouldIgnoreActorForSelection(HitActor))
+	{
+		UE_LOG(
+			LogTwinPilotOperatorController,
+			Verbose,
+			TEXT("Ignored actor for selection due to tag '%s': %s"),
+			*SelectionBlockedTag.ToString(),
+			*GetNameSafe(HitActor));
+		HitActor = nullptr;
+		return false;
+	}
+
+	return HitActor != nullptr;
+}
+
+bool ADigitalTwinOperatorController::ShouldIgnoreActorForSelection(const AActor* Actor) const
+{
+	return Actor != nullptr
+		&& !SelectionBlockedTag.IsNone()
+		&& Actor->ActorHasTag(SelectionBlockedTag);
 }

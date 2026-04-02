@@ -21,7 +21,9 @@ ADigitalTwinOperatorPawn::ADigitalTwinOperatorPawn()
 	CameraBoom->SetupAttachment(SceneRoot);
 	CameraBoom->TargetArmLength = LookDistance;
 	CameraBoom->bUsePawnControlRotation = true;
-	CameraBoom->bDoCollisionTest = false;
+	CameraBoom->bDoCollisionTest = true;
+	CameraBoom->ProbeSize = CameraBoomProbeSize;
+	CameraBoom->ProbeChannel = ECC_Camera;
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
@@ -31,7 +33,6 @@ ADigitalTwinOperatorPawn::ADigitalTwinOperatorPawn()
 	OrbitCenterArrow->SetupAttachment(SceneRoot);
 	OrbitCenterArrow->ArrowColor = FColor::Yellow;
 	OrbitCenterArrow->ArrowSize = 1.0f;
-	OrbitCenterArrow->SetHiddenInGame(false);
 
 	MovementComponent = CreateDefaultSubobject<UFloatingPawnMovement>(TEXT("FloatingMovement"));
 	MovementComponent->Acceleration = 8000.0f;
@@ -47,6 +48,7 @@ void ADigitalTwinOperatorPawn::BeginPlay()
 {
 	Super::BeginPlay();
 	OrbitCenterLocation = GetActorLocation();
+	OrbitCenterBaseLocation = OrbitCenterLocation;
 	if (OrbitCenterArrow != nullptr)
 	{
 		OrbitCenterArrow->SetWorldLocation(OrbitCenterLocation);
@@ -72,13 +74,9 @@ void ADigitalTwinOperatorPawn::Tick(float DeltaSeconds)
 		AddMovementInput(FVector::UpVector, VerticalInput);
 	}
 
-	if (OrbitCenterActor != nullptr)
-	{
-		FVector BoundsOrigin = FVector::ZeroVector;
-		FVector BoundsExtent = FVector::ZeroVector;
-		OrbitCenterActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
-		OrbitCenterLocation = BoundsOrigin;
-	}
+	UpdateOrbitCenterFromTrackedActor();
+	UpdatePan();
+	UpdateGoTowardActor(DeltaSeconds);
 
 	if (OrbitCenterArrow != nullptr)
 	{
@@ -190,6 +188,26 @@ void ADigitalTwinOperatorPawn::FocusAtLocation(FVector TargetWorldLocation, floa
 	}
 }
 
+void ADigitalTwinOperatorPawn::GoTowardActor(const AActor* TargetActor)
+{
+	if (TargetActor == nullptr)
+	{
+		GoTowardTargetActor = nullptr;
+		bIsArrived = true;
+		return;
+	}
+
+	FVector BoundsOrigin = FVector::ZeroVector;
+	FVector BoundsExtent = FVector::ZeroVector;
+	TargetActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+
+	GoTowardTargetActor = const_cast<AActor*>(TargetActor);
+	GoTowardTargetLocation = BoundsOrigin;
+	OrbitCenterOffset = FVector::ZeroVector;
+	bIsArrived = false;
+	SetCenterActor(TargetActor);
+}
+
 void ADigitalTwinOperatorPawn::SetCenterActor(const AActor* TargetActor)
 {
 	if (TargetActor == nullptr)
@@ -201,11 +219,18 @@ void ADigitalTwinOperatorPawn::SetCenterActor(const AActor* TargetActor)
 	FVector BoundsExtent = FVector::ZeroVector;
 	TargetActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
 	OrbitCenterActor = const_cast<AActor*>(TargetActor);
-	SetCenterLocation(BoundsOrigin);
+	OrbitCenterBaseLocation = BoundsOrigin;
+	OrbitCenterBoundsExtent = BoundsExtent;
+	OrbitCenterOffset = FVector::ZeroVector;
+	OrbitCenterLocation = OrbitCenterBaseLocation;
 }
 
 void ADigitalTwinOperatorPawn::SetCenterLocation(FVector PivotLocation)
 {
+	OrbitCenterActor = nullptr;
+	OrbitCenterBaseLocation = PivotLocation;
+	OrbitCenterBoundsExtent = FVector::ZeroVector;
+	OrbitCenterOffset = FVector::ZeroVector;
 	OrbitCenterLocation = PivotLocation;
 }
 
@@ -223,9 +248,47 @@ void ADigitalTwinOperatorPawn::ResetInput()
 {
 	MoveInput = FVector2D::ZeroVector;
 	LookInput = FVector2D::ZeroVector;
+	PendingPanInput = FVector2D::ZeroVector;
 	VerticalInput = 0.0f;
 	bSprintEnabled = false;
 	UpdateMovementSettings();
+}
+
+void ADigitalTwinOperatorPawn::HandleConfirmedActor_Implementation(const AActor* TargetActor)
+{
+	GoTowardActor(TargetActor);
+}
+
+void ADigitalTwinOperatorPawn::SetOrbitHeld_Implementation(bool bHeld)
+{
+	if (bHeld)
+	{
+		BeginOrbit();
+		return;
+	}
+
+	EndOrbit();
+}
+
+void ADigitalTwinOperatorPawn::SetPanHeld_Implementation(bool bHeld)
+{
+	bPanning = bHeld;
+	PendingPanInput = FVector2D::ZeroVector;
+
+	if (bPanning)
+	{
+		bIsArrived = true;
+	}
+}
+
+void ADigitalTwinOperatorPawn::AddPanInputDelta_Implementation(float ScreenXDelta, float ScreenYDelta)
+{
+	if (!bPanning || OrbitCenterActor == nullptr)
+	{
+		return;
+	}
+
+	PendingPanInput += FVector2D(ScreenXDelta, ScreenYDelta);
 }
 
 void ADigitalTwinOperatorPawn::UpdateMovementSettings() const
@@ -237,6 +300,81 @@ void ADigitalTwinOperatorPawn::UpdateMovementSettings() const
 
 	const float SpeedMultiplier = bSprintEnabled ? SprintMultiplier : 1.0f;
 	MovementComponent->MaxSpeed = MoveSpeed * SpeedMultiplier;
+}
+
+void ADigitalTwinOperatorPawn::UpdatePan()
+{
+	if (!bPanning || OrbitCenterActor == nullptr || PendingPanInput.IsNearlyZero())
+	{
+		return;
+	}
+
+	const FRotator ControlRotation = Controller != nullptr ? Controller->GetControlRotation() : GetActorRotation();
+	FVector PlaneRight = FRotationMatrix(ControlRotation).GetUnitAxis(EAxis::Y);
+	PlaneRight.Z = 0.0f;
+	PlaneRight.Normalize();
+	const float VerticalPanScale = FRotationMatrix(ControlRotation).GetUnitAxis(EAxis::X).Size2D();
+
+	const FVector RequestedDelta =
+		(PlaneRight * PendingPanInput.X + FVector::UpVector * (PendingPanInput.Y * VerticalPanScale)) * PanSensitivity;
+	FVector RequestedOffset = OrbitCenterOffset + RequestedDelta;
+	RequestedOffset.X = FMath::Clamp(RequestedOffset.X, -OrbitCenterBoundsExtent.X, OrbitCenterBoundsExtent.X);
+	RequestedOffset.Y = FMath::Clamp(RequestedOffset.Y, -OrbitCenterBoundsExtent.Y, OrbitCenterBoundsExtent.Y);
+	RequestedOffset.Z = FMath::Clamp(RequestedOffset.Z, -OrbitCenterBoundsExtent.Z, OrbitCenterBoundsExtent.Z);
+
+	const FVector AppliedDelta = RequestedOffset - OrbitCenterOffset;
+	OrbitCenterOffset = RequestedOffset;
+	OrbitCenterLocation = OrbitCenterBaseLocation + OrbitCenterOffset;
+
+	if (!AppliedDelta.IsNearlyZero())
+	{
+		SetActorLocation(GetActorLocation() + AppliedDelta, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+
+	PendingPanInput = FVector2D::ZeroVector;
+}
+
+void ADigitalTwinOperatorPawn::UpdateGoTowardActor(float DeltaSeconds)
+{
+	if (bIsArrived)
+	{
+		return;
+	}
+
+	if (GoTowardTargetActor != nullptr)
+	{
+		FVector BoundsOrigin = FVector::ZeroVector;
+		FVector BoundsExtent = FVector::ZeroVector;
+		GoTowardTargetActor->GetActorBounds(true, BoundsOrigin, BoundsExtent);
+		GoTowardTargetLocation = BoundsOrigin;
+	}
+
+	const FVector CurrentLocation = GetActorLocation();
+	const float ArrivalToleranceSq = FMath::Square(FMath::Max(0.0f, GoTowardArrivalTolerance));
+
+	if (FVector::DistSquared(CurrentLocation, GoTowardTargetLocation) <= ArrivalToleranceSq)
+	{
+		SetActorLocation(GoTowardTargetLocation, false, nullptr, ETeleportType::TeleportPhysics);
+		bIsArrived = true;
+		return;
+	}
+
+	const FVector NewLocation =
+		FMath::VInterpTo(CurrentLocation, GoTowardTargetLocation, DeltaSeconds, FMath::Max(0.01f, GoTowardInterpSpeed));
+	SetActorLocation(NewLocation, false, nullptr, ETeleportType::TeleportPhysics);
+}
+
+void ADigitalTwinOperatorPawn::UpdateOrbitCenterFromTrackedActor()
+{
+	if (OrbitCenterActor == nullptr)
+	{
+		return;
+	}
+
+	OrbitCenterOffset.X = FMath::Clamp(OrbitCenterOffset.X, -OrbitCenterBoundsExtent.X, OrbitCenterBoundsExtent.X);
+	OrbitCenterOffset.Y = FMath::Clamp(OrbitCenterOffset.Y, -OrbitCenterBoundsExtent.Y, OrbitCenterBoundsExtent.Y);
+	OrbitCenterOffset.Z = FMath::Clamp(OrbitCenterOffset.Z, -OrbitCenterBoundsExtent.Z, OrbitCenterBoundsExtent.Z);
+	OrbitCenterLocation = OrbitCenterBaseLocation + OrbitCenterOffset;
 }
 
 void ADigitalTwinOperatorPawn::UpdateLook()
