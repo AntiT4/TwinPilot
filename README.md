@@ -30,6 +30,8 @@ TwinPilot is an Unreal Engine plugin for operator-style camera and interaction c
 
 - `SelectActorUnderCursor(AActor*& HitActor)` returns selection success and exposes the hit actor.
 - `OnActorSelected` and `OnActorHovered` delegates are provided for Blueprint event wiring.
+- Actors tagged with `Background` are ignored by cursor selection by default via `SelectionBlockedTag`.
+- `ClearConfirmedActor()` clears both the confirmed selection and current hover/preselection state.
 
 ## Repository Layout
 

@@ -89,8 +89,7 @@ void ADigitalTwinOperatorController::BeginPlay()
 
 bool ADigitalTwinOperatorController::ConfirmActorUnderCursor(AActor*& HitActor)
 {
-	HitActor = nullptr;
-	UDigitalTwinPawnLibrary::GetActorUnderCursor(this, HitActor);
+	GetSelectableActorUnderCursor(HitActor);
 
 	if (HitActor == nullptr || HitActor != SelectedActor.Get())
 	{
@@ -133,12 +132,12 @@ bool ADigitalTwinOperatorController::SelectActorUnderCursor(AActor*& HitActor)
 bool ADigitalTwinOperatorController::SelectUnderCursor()
 {
 	AActor* HitActor = nullptr;
-	UDigitalTwinPawnLibrary::GetActorUnderCursor(this, HitActor);
+	GetSelectableActorUnderCursor(HitActor);
 	AActor* PreviousSelectedActor = SelectedActor.Get();
 
 	if (HitActor == nullptr)
 	{
-		return ClearSelectedActor();
+		return ClearConfirmedActor();
 	}
 
 	if (PreviousSelectedActor == HitActor)
@@ -164,6 +163,34 @@ bool ADigitalTwinOperatorController::ClearSelectedActor()
 	SelectedActor = nullptr;
 	RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
 	OnActorHovered.Broadcast(SelectedActor);
+	return true;
+}
+
+bool ADigitalTwinOperatorController::ClearConfirmedActor()
+{
+	AActor* PreviousConfirmedActor = ConfirmedActor.Get();
+	AActor* PreviousSelectedActor = SelectedActor.Get();
+	if (PreviousConfirmedActor == nullptr && PreviousSelectedActor == nullptr)
+	{
+		return false;
+	}
+
+	ConfirmedActor = nullptr;
+	SelectedActor = nullptr;
+
+	RefreshActorStencilByInteractionState(PreviousConfirmedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	if (PreviousSelectedActor != PreviousConfirmedActor)
+	{
+		RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	}
+
+	OnActorHovered.Broadcast(SelectedActor);
+	OnActorSelected.Broadcast(ConfirmedActor);
+	ExecuteOnControlledPawn(this, [](APawn* ControlledPawn)
+	{
+		ITwinPilotPawnControl::Execute_HandleConfirmedActor(ControlledPawn, nullptr);
+	});
+
 	return true;
 }
 
@@ -220,4 +247,31 @@ void ADigitalTwinOperatorController::ApplyMouseCursorPolicy()
 	InputMode.SetHideCursorDuringCapture(false);
 	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(InputMode);
+}
+
+bool ADigitalTwinOperatorController::GetSelectableActorUnderCursor(AActor*& HitActor) const
+{
+	HitActor = nullptr;
+	UDigitalTwinPawnLibrary::GetActorUnderCursor(const_cast<ADigitalTwinOperatorController*>(this), HitActor);
+
+	if (ShouldIgnoreActorForSelection(HitActor))
+	{
+		UE_LOG(
+			LogTwinPilotOperatorController,
+			Verbose,
+			TEXT("Ignored actor for selection due to tag '%s': %s"),
+			*SelectionBlockedTag.ToString(),
+			*GetNameSafe(HitActor));
+		HitActor = nullptr;
+		return false;
+	}
+
+	return HitActor != nullptr;
+}
+
+bool ADigitalTwinOperatorController::ShouldIgnoreActorForSelection(const AActor* Actor) const
+{
+	return Actor != nullptr
+		&& !SelectionBlockedTag.IsNone()
+		&& Actor->ActorHasTag(SelectionBlockedTag);
 }

@@ -33,6 +33,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Interaction")
 	bool ClearSelectedActor();
 
+	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Interaction")
+	bool ClearConfirmedActor();
+
 	UFUNCTION(
 		BlueprintCallable,
 		Category = "TwinPilot|Interaction",
@@ -75,6 +78,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "TwinPilot|Interaction")
 	FTwinPilotActorHoveredSignature OnActorHovered;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Interaction")
+	FName SelectionBlockedTag = TEXT("Background");
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Mouse")
 	bool bAlwaysShowCursor = true;
 
@@ -90,6 +96,8 @@ protected:
 
 private:
 	void ApplyMouseCursorPolicy();
+	bool GetSelectableActorUnderCursor(AActor*& HitActor) const;
+	bool ShouldIgnoreActorForSelection(const AActor* Actor) const;
 
 	bool bRotateHeld = false;
 };
