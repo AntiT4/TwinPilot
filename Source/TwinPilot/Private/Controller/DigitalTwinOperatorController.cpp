@@ -59,16 +59,16 @@ namespace
 
 	void RefreshActorStencilByInteractionState(
 		AActor* TargetActor,
-		AActor* CurrentConfirmedActor,
-		AActor* CurrentSelectedActor)
+		AActor* CurrentConfirmedHighlightedActor,
+		AActor* CurrentSelectedHighlightedActor)
 	{
 		if (TargetActor == nullptr)
 		{
 			return;
 		}
 
-		const bool bIsConfirmed = TargetActor == CurrentConfirmedActor;
-		const bool bIsSelected = TargetActor == CurrentSelectedActor;
+		const bool bIsConfirmed = TargetActor == CurrentConfirmedHighlightedActor;
+		const bool bIsSelected = TargetActor == CurrentSelectedHighlightedActor;
 
 		if (!bIsConfirmed && !bIsSelected)
 		{
@@ -78,6 +78,24 @@ namespace
 
 		const int32 StencilValue = bIsConfirmed ? ConfirmedActorStencilValue : SelectedActorStencilValue;
 		SetActorStencilState(TargetActor, true, StencilValue);
+	}
+
+	bool AreInteractionStatesEqual(
+		const FTwinPilotInteractionState& LeftState,
+		const FTwinPilotInteractionState& RightState)
+	{
+		return LeftState.SelectedActor == RightState.SelectedActor
+			&& LeftState.SelectedHighlightedActor == RightState.SelectedHighlightedActor
+			&& LeftState.ConfirmedActor == RightState.ConfirmedActor
+			&& LeftState.ConfirmedHighlightedActor == RightState.ConfirmedHighlightedActor;
+	}
+
+	void AddUniqueActor(TArray<AActor*>& Actors, AActor* Actor)
+	{
+		if (Actor != nullptr)
+		{
+			Actors.AddUnique(Actor);
+		}
 	}
 }
 
@@ -96,10 +114,11 @@ bool ADigitalTwinOperatorController::ConfirmActorUnderCursor(AActor*& HitActor)
 		return false;
 	}
 
-	AActor* PreviousConfirmedActor = ConfirmedActor.Get();
+	const FTwinPilotInteractionState PreviousState = GetInteractionState();
 	ConfirmedActor = HitActor;
-	RefreshActorStencilByInteractionState(PreviousConfirmedActor, ConfirmedActor.Get(), SelectedActor.Get());
-	RefreshActorStencilByInteractionState(ConfirmedActor.Get(), ConfirmedActor.Get(), SelectedActor.Get());
+	UpdateHighlightedActors();
+	RefreshInteractionHighlights(PreviousState);
+	NotifyInteractionStateChange(PreviousState);
 
 	if (ConfirmedActor != nullptr)
 	{
@@ -133,56 +152,55 @@ bool ADigitalTwinOperatorController::SelectUnderCursor()
 {
 	AActor* HitActor = nullptr;
 	GetSelectableActorUnderCursor(HitActor);
-	AActor* PreviousSelectedActor = SelectedActor.Get();
 
 	if (HitActor == nullptr)
 	{
 		return ClearConfirmedActor();
 	}
 
-	if (PreviousSelectedActor == HitActor)
+	if (SelectedActor == HitActor)
 	{
 		return true;
 	}
 
+	const FTwinPilotInteractionState PreviousState = GetInteractionState();
 	SelectedActor = HitActor;
-	RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
-	RefreshActorStencilByInteractionState(SelectedActor.Get(), ConfirmedActor.Get(), SelectedActor.Get());
+	UpdateHighlightedActors();
+	RefreshInteractionHighlights(PreviousState);
+	NotifyInteractionStateChange(PreviousState);
 	OnActorHovered.Broadcast(SelectedActor);
 	return SelectedActor != nullptr;
 }
 
 bool ADigitalTwinOperatorController::ClearSelectedActor()
 {
-	AActor* PreviousSelectedActor = SelectedActor.Get();
-	if (PreviousSelectedActor == nullptr)
+	if (SelectedActor == nullptr)
 	{
 		return false;
 	}
 
+	const FTwinPilotInteractionState PreviousState = GetInteractionState();
 	SelectedActor = nullptr;
-	RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
+	UpdateHighlightedActors();
+	RefreshInteractionHighlights(PreviousState);
+	NotifyInteractionStateChange(PreviousState);
 	OnActorHovered.Broadcast(SelectedActor);
 	return true;
 }
 
 bool ADigitalTwinOperatorController::ClearConfirmedActor()
 {
-	AActor* PreviousConfirmedActor = ConfirmedActor.Get();
-	AActor* PreviousSelectedActor = SelectedActor.Get();
-	if (PreviousConfirmedActor == nullptr && PreviousSelectedActor == nullptr)
+	if (ConfirmedActor == nullptr && SelectedActor == nullptr)
 	{
 		return false;
 	}
 
+	const FTwinPilotInteractionState PreviousState = GetInteractionState();
 	ConfirmedActor = nullptr;
 	SelectedActor = nullptr;
-
-	RefreshActorStencilByInteractionState(PreviousConfirmedActor, ConfirmedActor.Get(), SelectedActor.Get());
-	if (PreviousSelectedActor != PreviousConfirmedActor)
-	{
-		RefreshActorStencilByInteractionState(PreviousSelectedActor, ConfirmedActor.Get(), SelectedActor.Get());
-	}
+	UpdateHighlightedActors();
+	RefreshInteractionHighlights(PreviousState);
+	NotifyInteractionStateChange(PreviousState);
 
 	OnActorHovered.Broadcast(SelectedActor);
 	OnActorSelected.Broadcast(ConfirmedActor);
@@ -274,4 +292,56 @@ bool ADigitalTwinOperatorController::ShouldIgnoreActorForSelection(const AActor*
 	return Actor != nullptr
 		&& !SelectionBlockedTag.IsNone()
 		&& Actor->ActorHasTag(SelectionBlockedTag);
+}
+
+FTwinPilotInteractionState ADigitalTwinOperatorController::GetInteractionState() const
+{
+	FTwinPilotInteractionState InteractionState;
+	InteractionState.SelectedActor = SelectedActor;
+	InteractionState.SelectedHighlightedActor = SelectedHighlightedActor;
+	InteractionState.ConfirmedActor = ConfirmedActor;
+	InteractionState.ConfirmedHighlightedActor = ConfirmedHighlightedActor;
+	return InteractionState;
+}
+
+void ADigitalTwinOperatorController::UpdateHighlightedActors()
+{
+	ConfirmedHighlightedActor = ConfirmedActor;
+	SelectedHighlightedActor = SelectedActor != ConfirmedActor ? SelectedActor.Get() : nullptr;
+}
+
+void ADigitalTwinOperatorController::RefreshInteractionHighlights(const FTwinPilotInteractionState& PreviousState)
+{
+	const FTwinPilotInteractionState CurrentState = GetInteractionState();
+	TArray<AActor*> AffectedActors;
+	AddUniqueActor(AffectedActors, PreviousState.SelectedHighlightedActor.Get());
+	AddUniqueActor(AffectedActors, PreviousState.ConfirmedHighlightedActor.Get());
+	AddUniqueActor(AffectedActors, CurrentState.SelectedHighlightedActor.Get());
+	AddUniqueActor(AffectedActors, CurrentState.ConfirmedHighlightedActor.Get());
+
+	for (AActor* AffectedActor : AffectedActors)
+	{
+		RefreshActorStencilByInteractionState(
+			AffectedActor,
+			CurrentState.ConfirmedHighlightedActor.Get(),
+			CurrentState.SelectedHighlightedActor.Get());
+	}
+}
+
+void ADigitalTwinOperatorController::NotifyInteractionStateChange(const FTwinPilotInteractionState& PreviousState)
+{
+	const FTwinPilotInteractionState CurrentState = GetInteractionState();
+	if (AreInteractionStatesEqual(PreviousState, CurrentState))
+	{
+		return;
+	}
+
+	LastInteractionStateChange.PreviousState = PreviousState;
+	LastInteractionStateChange.CurrentState = CurrentState;
+	LastInteractionStateChange.NewlyConfirmedActor =
+		PreviousState.ConfirmedActor != CurrentState.ConfirmedActor ? CurrentState.ConfirmedActor.Get() : nullptr;
+	LastInteractionStateChange.ReleasedConfirmedActor =
+		PreviousState.ConfirmedActor != CurrentState.ConfirmedActor ? PreviousState.ConfirmedActor.Get() : nullptr;
+
+	OnInteractionStateChanged.Broadcast(LastInteractionStateChange);
 }

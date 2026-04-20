@@ -12,7 +12,9 @@ public class TwinPilot : ModuleRules
 				"Core",
 				"CoreUObject",
 				"Engine",
-				"InputCore"
+				"InputCore",
+				"Json",
+				"JsonUtilities"
 			});
 	}
 }

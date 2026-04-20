@@ -6,8 +6,48 @@
 
 class AActor;
 
+USTRUCT(BlueprintType)
+struct TWINPILOT_API FTwinPilotInteractionState
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> SelectedActor = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> SelectedHighlightedActor = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> ConfirmedActor = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> ConfirmedHighlightedActor = nullptr;
+};
+
+USTRUCT(BlueprintType)
+struct TWINPILOT_API FTwinPilotInteractionStateChange
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	FTwinPilotInteractionState PreviousState;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	FTwinPilotInteractionState CurrentState;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> NewlyConfirmedActor = nullptr;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> ReleasedConfirmedActor = nullptr;
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTwinPilotActorSelectedSignature, AActor*, SelectedActor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTwinPilotActorHoveredSignature, AActor*, HoveredActor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FTwinPilotInteractionStateChangedSignature,
+	const FTwinPilotInteractionStateChange&,
+	InteractionStateChange);
 
 UCLASS(Blueprintable)
 class TWINPILOT_API ADigitalTwinOperatorController : public APlayerController
@@ -54,7 +94,19 @@ public:
 	AActor* GetSelectedActor() const { return SelectedActor; }
 
 	UFUNCTION(BlueprintPure, Category = "TwinPilot|Interaction")
+	AActor* GetSelectedHighlightedActor() const { return SelectedHighlightedActor; }
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Interaction")
 	AActor* GetConfirmedActor() const { return ConfirmedActor; }
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Interaction")
+	AActor* GetConfirmedHighlightedActor() const { return ConfirmedHighlightedActor; }
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Interaction")
+	FTwinPilotInteractionState GetInteractionState() const;
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Interaction")
+	FTwinPilotInteractionStateChange GetLastInteractionStateChange() const { return LastInteractionStateChange; }
 
 	UFUNCTION(
 		BlueprintPure,
@@ -78,6 +130,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "TwinPilot|Interaction")
 	FTwinPilotActorHoveredSignature OnActorHovered;
 
+	UPROPERTY(BlueprintAssignable, Category = "TwinPilot|Interaction")
+	FTwinPilotInteractionStateChangedSignature OnInteractionStateChanged;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Interaction")
 	FName SelectionBlockedTag = TEXT("Background");
 
@@ -92,12 +147,24 @@ protected:
 	TObjectPtr<AActor> ConfirmedActor;
 
 	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> ConfirmedHighlightedActor;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
 	TObjectPtr<AActor> SelectedActor;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	TObjectPtr<AActor> SelectedHighlightedActor;
+
+	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
+	FTwinPilotInteractionStateChange LastInteractionStateChange;
 
 private:
 	void ApplyMouseCursorPolicy();
 	bool GetSelectableActorUnderCursor(AActor*& HitActor) const;
 	bool ShouldIgnoreActorForSelection(const AActor* Actor) const;
+	void UpdateHighlightedActors();
+	void RefreshInteractionHighlights(const FTwinPilotInteractionState& PreviousState);
+	void NotifyInteractionStateChange(const FTwinPilotInteractionState& PreviousState);
 
 	bool bRotateHeld = false;
 };
