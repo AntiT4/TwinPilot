@@ -44,6 +44,8 @@ struct TWINPILOT_API FTwinPilotInteractionStateChange
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTwinPilotActorSelectedSignature, AActor*, SelectedActor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FTwinPilotActorHoveredSignature, AActor*, HoveredActor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FTwinPilotInputIdleSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FTwinPilotInputActiveSignature);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
 	FTwinPilotInteractionStateChangedSignature,
 	const FTwinPilotInteractionStateChange&,
@@ -56,6 +58,23 @@ class TWINPILOT_API ADigitalTwinOperatorController : public APlayerController
 
 public:
 	virtual void BeginPlay() override;
+	virtual void PlayerTick(float DeltaTime) override;
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+	virtual bool InputTouch(
+		const FInputDeviceId DeviceId,
+		uint32 Handle,
+		ETouchType::Type Type,
+		const FVector2D& TouchLocation,
+		float Force,
+		uint32 TouchpadIndex,
+		const uint64 Timestamp) override;
+	virtual bool InputMotion(
+		const FInputDeviceId DeviceId,
+		const FVector& Tilt,
+		const FVector& RotationRate,
+		const FVector& Gravity,
+		const FVector& Acceleration,
+		const uint64 Timestamp) override;
 
 	UFUNCTION(BlueprintCallable, Category = "TwinPilot|Interaction")
 	bool ConfirmActorUnderCursor(AActor*& HitActor);
@@ -133,6 +152,12 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "TwinPilot|Interaction")
 	FTwinPilotInteractionStateChangedSignature OnInteractionStateChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "TwinPilot|Input")
+	FTwinPilotInputIdleSignature OnInputIdle;
+
+	UPROPERTY(BlueprintAssignable, Category = "TwinPilot|Input")
+	FTwinPilotInputActiveSignature OnInputActive;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Interaction")
 	FName SelectionBlockedTag = TEXT("Background");
 
@@ -141,6 +166,21 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Mouse")
 	bool bEnableMouseClickSelection = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Input", meta = (ClampMin = "0.1"))
+	float InputIdleTimeoutSeconds = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Input")
+	bool bEnableInputIdleEvents = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "TwinPilot|Input", meta = (ClampMin = "0.0"))
+	float InputActivityAxisThreshold = 0.01f;
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Input")
+	bool IsInputIdle() const { return bInputIdle; }
+
+	UFUNCTION(BlueprintPure, Category = "TwinPilot|Input")
+	float GetSecondsSinceLastInput() const;
 
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "TwinPilot|Interaction")
@@ -165,6 +205,10 @@ private:
 	void UpdateHighlightedActors();
 	void RefreshInteractionHighlights(const FTwinPilotInteractionState& PreviousState);
 	void NotifyInteractionStateChange(const FTwinPilotInteractionState& PreviousState);
+	void NotifyUserInputActivity();
+	bool ShouldCountInputKeyAsActivity(const FInputKeyEventArgs& Params) const;
 
 	bool bRotateHeld = false;
+	bool bInputIdle = false;
+	double LastInputActivityTimeSec = 0.0;
 };

@@ -6,6 +6,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
+#include "InputKeyEventArgs.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogTwinPilotOperatorController, Log, All);
 
@@ -102,7 +103,65 @@ namespace
 void ADigitalTwinOperatorController::BeginPlay()
 {
 	Super::BeginPlay();
+	LastInputActivityTimeSec = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
+	bInputIdle = false;
 	ApplyMouseCursorPolicy();
+}
+
+void ADigitalTwinOperatorController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+
+	if (!bEnableInputIdleEvents || bInputIdle)
+	{
+		return;
+	}
+
+	const float SecondsSinceLastInput = GetSecondsSinceLastInput();
+	if (SecondsSinceLastInput >= InputIdleTimeoutSeconds)
+	{
+		bInputIdle = true;
+		OnInputIdle.Broadcast();
+	}
+}
+
+bool ADigitalTwinOperatorController::InputKey(const FInputKeyEventArgs& Params)
+{
+	if (ShouldCountInputKeyAsActivity(Params))
+	{
+		NotifyUserInputActivity();
+	}
+
+	return Super::InputKey(Params);
+}
+
+bool ADigitalTwinOperatorController::InputTouch(
+	const FInputDeviceId DeviceId,
+	uint32 Handle,
+	ETouchType::Type Type,
+	const FVector2D& TouchLocation,
+	float Force,
+	uint32 TouchpadIndex,
+	const uint64 Timestamp)
+{
+	NotifyUserInputActivity();
+	return Super::InputTouch(DeviceId, Handle, Type, TouchLocation, Force, TouchpadIndex, Timestamp);
+}
+
+bool ADigitalTwinOperatorController::InputMotion(
+	const FInputDeviceId DeviceId,
+	const FVector& Tilt,
+	const FVector& RotationRate,
+	const FVector& Gravity,
+	const FVector& Acceleration,
+	const uint64 Timestamp)
+{
+	if (!Tilt.IsNearlyZero() || !RotationRate.IsNearlyZero() || !Gravity.IsNearlyZero() || !Acceleration.IsNearlyZero())
+	{
+		NotifyUserInputActivity();
+	}
+
+	return Super::InputMotion(DeviceId, Tilt, RotationRate, Gravity, Acceleration, Timestamp);
 }
 
 bool ADigitalTwinOperatorController::ConfirmActorUnderCursor(AActor*& HitActor)
@@ -344,4 +403,42 @@ void ADigitalTwinOperatorController::NotifyInteractionStateChange(const FTwinPil
 		PreviousState.ConfirmedActor != CurrentState.ConfirmedActor ? PreviousState.ConfirmedActor.Get() : nullptr;
 
 	OnInteractionStateChanged.Broadcast(LastInteractionStateChange);
+}
+
+float ADigitalTwinOperatorController::GetSecondsSinceLastInput() const
+{
+	const UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return 0.0f;
+	}
+
+	return static_cast<float>(FMath::Max(0.0, static_cast<double>(World->GetTimeSeconds()) - LastInputActivityTimeSec));
+}
+
+void ADigitalTwinOperatorController::NotifyUserInputActivity()
+{
+	const UWorld* World = GetWorld();
+	LastInputActivityTimeSec = World != nullptr ? World->GetTimeSeconds() : 0.0;
+
+	if (!bEnableInputIdleEvents || !bInputIdle)
+	{
+		return;
+	}
+
+	bInputIdle = false;
+	OnInputActive.Broadcast();
+}
+
+bool ADigitalTwinOperatorController::ShouldCountInputKeyAsActivity(const FInputKeyEventArgs& Params) const
+{
+	if (Params.Event == IE_Axis)
+	{
+		return FMath::Abs(Params.AmountDepressed) > InputActivityAxisThreshold;
+	}
+
+	return Params.Event == IE_Pressed
+		|| Params.Event == IE_Released
+		|| Params.Event == IE_Repeat
+		|| Params.Event == IE_DoubleClick;
 }
