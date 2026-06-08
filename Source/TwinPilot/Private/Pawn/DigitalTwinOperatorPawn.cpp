@@ -1,6 +1,7 @@
 #include "Pawn/DigitalTwinOperatorPawn.h"
 
 #include "Camera/CameraComponent.h"
+#include "Components/TagFilteredSpringArmComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
@@ -17,7 +18,7 @@ ADigitalTwinOperatorPawn::ADigitalTwinOperatorPawn()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
-	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom = CreateDefaultSubobject<UTagFilteredSpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(SceneRoot);
 	CameraBoom->TargetArmLength = LookDistance;
 	CameraBoom->bUsePawnControlRotation = true;
